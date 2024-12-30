@@ -1,5 +1,6 @@
 # BlockPuzzle Play, AI Play & Train
 
+[Demos]([bp5_20241220_5streak.html](https://kviksna.github.io/BlockPuzzle-AI-Play/))
 * [5x5](bp5_20241220_5streak.html)
 * [5x5 Random](bp5_20241218_5streak_rnd.html)
 * [9x9](bp9_b4_20241220.html)
