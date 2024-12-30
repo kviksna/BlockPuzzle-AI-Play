@@ -1,0 +1,538 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Block Puzzle Random! (9x9)</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #1a1a1a;
+            color: lightgray;
+            font-family: Arial, sans-serif;
+        }
+
+        .game-container {
+            text-align: center;
+            width: 600px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            gap: 2px;
+            background: #333;
+            padding: 4px;
+            border-radius: 4px;
+            margin: 10px auto;
+            width: min-content;
+        }
+
+        .cell {
+            width: 35px;
+            height: 35px;
+            background: #242424;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .cell:hover {
+            background: #444;
+        }
+
+        .cell.filled {
+            background: #4CAF50;
+        }
+
+.cell.ghost {
+    background: rgba(76, 175, 80, 0.5); /* Semi-transparent green */
+}
+
+        .blocks-container {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin: 10px 0;
+        }
+
+        .block {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2px;
+            background: #333;
+            padding: 4px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .block-cell {
+            width: 20px;
+            height: 20px;
+            background: #242424;
+        }
+
+        .block-cell.active {
+            background: #4CAF50;
+        }
+
+        .block.selected {
+            outline: 2px solid #4CAF50;
+        }
+
+        .scores {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 5px 0;
+            font-size: 1.1em;
+        }
+
+        button {
+            background: #388E3C;
+            border: none;
+            padding: 8px 16px;
+            color: lightgray;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        textarea {
+            width: 100%;
+            height: 45px;
+            background: #242424;
+            color: gray;
+            border: 1px solid #333;
+            border-radius: 4px;
+            /*padding: 10px;*/
+            resize: none;
+            font-family: inherit;
+        }
+		
+		input[type="checkbox"] {
+			background: #404040;
+		}
+
+        input[type="number"] {
+            background: #404040;
+            color: #808080;
+            width: 50px;
+            padding-right: 0;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            -webkit-appearance: textfield;
+            appearance: textfield;
+        }
+
+        /* Style for spinner buttons */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            opacity: 1;
+            -webkit-appearance: inner-spin-button;
+        }
+
+        /* Focus state */
+        input[type="number"]:focus {
+            outline: 1px solid #808080;
+            outline-offset: 1px;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="header">
+            <h2>Block Puzzle Random! (9x9)</h2>
+            <button onclick="resetGame()">New Game</button>
+        </div>
+
+        <div class="scores">Lines: <span id="linesScore">0</span></div>
+		<div class="blocks-container" id="blocks"></div>
+        <div class="board" id="board"></div>
+
+		<div class="delay-container">
+			<input id="trainLimitK" type="number" min="10" max="500" step="10" value="100"> k limit
+			<button id="toggleTrain">Start Training</button>
+			<span class="label">Delay (<span class="delay-value" id="delayValue">100</span>ms):</span>
+			<input type="range" class="delay-slider" id="delaySlider" value="100" min="0" max="200">
+			<input type="checkbox" id="checkVerbose" checked>Verbose
+		</div>
+
+		<div class="scores">
+			<div>Games: <span id="statGames">0</span></div>
+			<div>maxLines: <span id="statMaxLines">0</span></div>
+			<div>avgLines: <span id="statAvgLines">0</span></div>
+			<div>Rewards:<br><span id="statRewards">[0]:0 [1]:0</span></div>
+		</div>
+
+    </div>
+
+<script>
+const BOARD_SIZE = 9;
+const BOARD_CELLS = BOARD_SIZE * BOARD_SIZE;
+let linesCleared = 0;
+let selectedBlockIndex = -1;
+let board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+let statGames = 0;
+let maxLines = 0;
+let maxLinesArr = [];
+let sumLines = 0;
+let trainingMode = false;
+let delay = 100; //ms
+let trainLimitK = 100; // K
+let agent;
+let rewards = []; // Array
+let invalid_sum = 0;
+let verbose = true;
+
+const blocks = [
+			[
+                [1, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0]
+            ],
+			[
+                [1, 1, 0],
+                [1, 1, 0],
+                [0, 0, 0]
+            ],
+            [
+                [1, 1, 0],
+                [0, 0, 0],
+                [0, 0, 0]
+            ],
+            [
+                [1, 0, 0],
+                [1, 0, 0],
+                [0, 0, 0]
+            ],
+			//[
+            //    [1, 0, 0],
+            //    [1, 1, 0],
+            //    [0, 0, 0]
+            //],
+            //[
+            //    [1, 1, 1],
+            //    [0, 1, 0],
+            //    [0, 0, 0]
+            //]
+];
+
+        function getBlockName(blockIndex) {
+            const shapes = ["block","square","hor-line","ver-line",
+				//"sm-dl-corner",
+				//"sm-top T-shape"
+			];
+            return shapes[blockIndex];
+        }
+
+        function updateScores() {
+			if(verbose) document.getElementById('linesScore').textContent = linesCleared;
+        }
+
+function createBoard() {
+if(verbose) {
+    const boardElement = document.getElementById('board');
+    boardElement.innerHTML = '';
+    
+    for (let i = 0; i < BOARD_SIZE; i++) {
+        for (let j = 0; j < BOARD_SIZE; j++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell' + (board[i][j] ? ' filled' : '');
+            cell.onmouseover = () => {
+                if (selectedBlockIndex !== -1) {
+                    highlightGhostBlock(i, j, blocks[selectedBlockIndex]);
+                }
+            };
+            cell.onclick = () => tryPlaceBlock(i, j);
+            boardElement.appendChild(cell);
+        }
+    }
+}
+}
+
+function createBlocks() {
+            // Randomly select one block
+            const randomIndex = Math.floor(Math.random() * blocks.length);
+		if(verbose) {
+			const blocksContainer = document.getElementById('blocks');
+            blocksContainer.innerHTML = '';
+            const blockElement = document.createElement('div');
+            blockElement.className = 'block';
+            
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'block-cell' + (blocks[randomIndex][i][j] ? ' active' : '');
+                    blockElement.appendChild(cell);
+                }
+            }
+            
+            blocksContainer.appendChild(blockElement);
+		} // EO if(verbose)
+			selectedBlockIndex = randomIndex;
+} // EO createBlocks()
+
+function highlightGhostBlock(row, col, block) {
+    const boardElement = document.getElementById('board');
+    boardElement.querySelectorAll('.cell').forEach(cell => cell.classList.remove('ghost'));
+
+    if (canPlaceBlock(row, col, block)) {
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+                if (block[i][j]) {
+                    const ghostCell = boardElement.children[(row + i) * BOARD_SIZE + (col + j)];
+                    ghostCell.classList.add('ghost');
+                }
+            }
+        }
+    }
+} // EO highlightGhostBlock()
+
+        function canPlaceBlock(row, col, block) {
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    if (block[i][j]) {
+                        const newRow = row + i;
+                        const newCol = col + j;
+                        if (newRow >= BOARD_SIZE || newCol >= BOARD_SIZE || board[newRow][newCol]) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
+        function placeBlock(row, col, block) {
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    if (block[i][j]) {
+                        board[row + i][col + j] = 1;
+                    }
+                }
+            }
+        }
+
+        function tryPlaceBlock(row, col) {
+            if (selectedBlockIndex === -1) return;
+            
+            const block = blocks[selectedBlockIndex];
+            if (canPlaceBlock(row, col, block)) {
+                placeBlock(row, col, block);
+                updateScores();
+                createBoard();
+                checkLines();
+                createBlocks(); // Generate new random block
+				return true;
+            } else {
+				return false;
+			}
+        }
+
+        function checkLines() {
+            
+            // Check rows
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                if (board[i].every(cell => cell === 1)) {
+                    board[i].fill(0);
+                    linesCleared++;
+                }
+            }
+            
+            // Check columns
+            for (let j = 0; j < BOARD_SIZE; j++) {
+                if (board.every(row => row[j] === 1)) {
+                    for (let i = 0; i < BOARD_SIZE; i++) {
+                        board[i][j] = 0;
+                    }
+                    linesCleared++;
+                }
+            }
+            
+            if (linesCleared > 0) {
+                updateScores();
+                createBoard();
+            }
+        } // EO checkLines()
+
+        function resetGame() {
+            board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+			linesCleared = 0;
+            selectedBlockIndex = -1;
+            updateScores();
+            createBoard();
+            createBlocks();
+            updateStats();
+        }
+
+/*
+Comments from Karpathys Waterworld:
+spec.experience_size = 10000; // size of experience replay memory: 5000
+*/
+
+        // Initialize agent
+        function initAgent() {
+            const spec = {
+                update: 'qlearn', // qlearn | sarsa
+                gamma: 0.9, // discount factor, [0, 1)
+                epsilon: 0.2, // initial epsilon for epsilon-greedy policy, [0, 1)
+                alpha: 0.01, // value function learning rate: 0.005
+                experience_add_every: 10, // number of time steps before we add another experience to replay memory: 5
+                learning_steps_per_iteration: 10, // 5, 20
+                tderror_clamp: 1.0, // for robustness
+                num_hidden_units: 100, // number of neurons in hidden layer
+            };
+            agent = new RL.DQNAgent({ 
+                getNumStates: () => BOARD_CELLS + 1, 
+                getMaxNumActions: () => BOARD_CELLS
+            }, spec); // give agent a TD brain
+
+			console.log("Agent initialized.");
+        }
+
+// Function to generate the bar chart
+function generateBarChart(arr) {
+  // Get the maximum value for scaling the bars
+  const maxValue = Math.max(...Object.values(arr));
+
+  // Iterate through the array and generate the bar chart
+  Object.keys(arr).forEach(key => {
+    const value = arr[key];
+    const barLength = Math.round((value / maxValue) * 40); // Scale bars to fit within 40 characters
+    const bar = '*'.repeat(barLength); // #
+    console.log(`${key}: ${value} | ${bar}`);
+  });
+}
+
+        function toggleTraining() {
+            trainingMode = !trainingMode;
+            document.getElementById("toggleTrain").innerText = trainingMode ? "Stop Training" : "Start Training";
+            if (trainingMode) trainModel();
+			//console.log("Training mode: ",trainingMode);
+			console.log("Training mode: ",trainingMode,"(",new Date().toISOString().replace('T', ' ').split('.')[0],")");
+			
+			if(!trainingMode) {
+				generateBarChart(maxLinesArr);
+				generateBarChart(rewards);
+			}
+        }
+
+    function trainModel() {
+        if (!trainingMode) return;
+
+        if (isGameOver() || invalid_sum < -24) {
+			//agent.learn(-10);  // Penalty for short games
+			statGames += 1;
+			sumLines += linesCleared;
+			maxLinesArr[linesCleared] = (maxLinesArr[linesCleared] || 0) + 1;
+            //console.log("Game Over. Restarting...");
+            if(statGames >trainLimitK*1000) { toggleTraining(); console.log("Training games limit (",trainLimitK,"k) reached!"); }
+            resetGame();
+        }
+
+        //let state = [...board.flat(), selectedBlockIndex+2]; // Combine board and block type; Better +10 / +100
+        //let action = agent.act(state);
+        //let row = Math.floor(action / BOARD_SIZE);
+        //let col = action % BOARD_SIZE;
+
+		const rndRow = Math.floor(Math.random() * BOARD_SIZE);
+        const rndCol = Math.floor(Math.random() * BOARD_SIZE);
+
+		let reward = 0;
+		const linesClearedOld = linesCleared;
+        if (tryPlaceBlock(rndRow, rndCol, blocks[selectedBlockIndex])) {
+            reward = 1; // +1 for block placed
+			reward += (linesCleared - linesClearedOld) *10;
+            invalid_sum = 0; // Reset
+            //agent.learn(reward);
+			rewards[reward] = (rewards[reward] || 0) + 1;
+			//console.log(getBlockName(selectedBlockIndex),": row:",row,", col:",col,", reward: ",reward); // Debug
+        } else {
+			reward = -5; // -1
+            invalid_sum += reward;
+            //agent.learn(reward); // Penalty for invalid move
+			rewards[0] = (rewards[0] || 0) + 1; // Index "-1" is invalid
+        }
+		
+		//console.log("Agent.act(",action,"):",getBlockName(selectedBlockIndex),": row:",row,", col:",col,", reward: ",reward); // Debug
+
+		if(linesCleared>maxLines) {
+			maxLines = linesCleared; //new maxLines
+			console.log("Games: ",statGames,", maxLines:",maxLines,", avgLines:",(statGames==0?0:sumLines/statGames).toFixed(2));
+		}
+
+        if (verbose) updateStats();
+		if (trainingMode) setTimeout(trainModel, delay); //Continue training
+    } // EO trainModel()
+
+        function updateStats() {
+			document.getElementById('statGames').innerText = statGames;
+			//document.getElementById('statMaxLines').innerText = maxLines;
+			//maxLinesArr[linesCleared] = (maxLinesArr[linesCleared] || 0) + 1;
+			document.getElementById('statMaxLines').innerText = Object.keys(maxLinesArr).map(key => `[${key}]:${maxLinesArr[key]}`).join(" ");
+			document.getElementById('statAvgLines').innerText = (statGames==0?0:sumLines/statGames).toFixed(2);
+            //document.getElementById("statMemory").innerText = (JSON.stringify(agent).length /1024).toFixed(0);
+			document.getElementById('statRewards').innerText = Object.keys(rewards).map(key => `[${key}]:${rewards[key]}`).join(" ");
+        }
+
+    function isGameOver() {
+        // Ensure there's a selected block to check
+        if (selectedBlockIndex === -1) return false;
+
+        // Get the currently selected block
+        const currentBlock = blocks[selectedBlockIndex];
+
+        // Check if the current block can be placed anywhere on the board
+        for (let row = 0; row < BOARD_SIZE; row++) {
+            for (let col = 0; col < BOARD_SIZE; col++) {
+                if (canPlaceBlock(row, col, currentBlock)) {
+                    return false; // There's at least one valid move
+                }
+            }
+        }
+
+        return true; // No valid moves for the current block
+    }
+
+        //initAgent();
+        document.getElementById("toggleTrain").onclick = toggleTraining;
+		
+		// Initialize game
+        resetGame();
+    </script>
+	
+    <script>
+        document.getElementById('delaySlider').addEventListener('input', e => {
+            document.getElementById('delayValue').textContent = e.target.value;
+			delay = e.target.value;
+		});
+
+		document.getElementById('checkVerbose').addEventListener('change', function (event) {
+			if (event.target.checked) { verbose = true; }
+			else { verbose = false; }
+		});
+
+		document.getElementById('trainLimitK').addEventListener('change', (e) => {
+			trainLimitK = e.target.value;
+		});
+    </script>
+</body>
+</html>
