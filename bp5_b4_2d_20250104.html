@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <title>Block Puzzle (5x5)</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #1a1a1a;
+            color: lightgray;
+            font-family: Arial, sans-serif;
+        }
+
+        .game-container {
+            text-align: center;
+            width: 600px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 2px;
+            background: #333;
+            padding: 4px;
+            border-radius: 4px;
+            margin: 10px auto;
+            width: min-content;
+        }
+
+        .cell {
+            width: 35px;
+            height: 35px;
+            background: #242424;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .cell:hover {
+            background: #444;
+        }
+
+        .cell.filled {
+            background: #4CAF50;
+        }
+
+.cell.ghost {
+    background: rgba(76, 175, 80, 0.5); /* Semi-transparent green */
+}
+
+        .blocks-container {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin: 10px 0;
+        }
+
+        .block {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2px;
+            background: #333;
+            padding: 4px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .block-cell {
+            width: 20px;
+            height: 20px;
+            background: #242424;
+        }
+
+        .block-cell.active {
+            background: #4CAF50;
+        }
+
+        .block.selected {
+            outline: 2px solid #4CAF50;
+        }
+
+        .scores {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 5px 0;
+            font-size: 1.1em;
+        }
+
+        button {
+            background: #388E3C;
+            border: none;
+            padding: 8px 16px;
+            color: lightgray;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        textarea {
+            width: 100%;
+            height: 45px;
+            background: #242424;
+            color: gray;
+            border: 1px solid #333;
+            border-radius: 4px;
+            /*padding: 10px;*/
+            resize: none;
+            font-family: inherit;
+        }
+		
+		input[type="checkbox"] {
+			background: #404040;
+		}
+
+        input[type="number"] {
+            background: #404040;
+            color: #808080;
+            width: 40px;
+            padding-right: 0;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            -webkit-appearance: textfield;
+            appearance: textfield;
+        }
+
+        /* Style for spinner buttons */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            opacity: 1;
+            -webkit-appearance: inner-spin-button;
+        }
+
+        /* Focus state */
+        input[type="number"]:focus {
+            outline: 1px solid #808080;
+            outline-offset: 1px;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="header">
+            <h2>Block Puzzle (5x5)</h2>
+            <button onclick="resetGame()">New Game</button>
+        </div>
+
+        <div class="scores">Lines: <span id="linesScore">0</span></div>
+		<div class="blocks-container" id="blocks"></div>
+        <div class="board" id="board"></div>
+
+		<div class="delay-container">
+			<input id="trainLimitK" type="number" min="10" max="100" step="10" value="20"> k limit
+			<button id="toggleTrain">Start Training</button>
+			<span class="label">Delay (<span class="delay-value" id="delayValue">100</span>ms):</span>
+			<input type="range" class="delay-slider" id="delaySlider" value="100" min="0" max="200">
+			<input type="checkbox" id="checkVerbose" checked>Verbose
+		</div>
+
+		<div class="scores">
+			<div>Games: <span id="statGames">0</span></div>
+			<div>maxLines: <span id="statMaxLines">0</span></div>
+			<div>avgLines: <span id="statAvgLines">0</span></div>
+			<div>Model(kB): <span id="statMemory">0</span></div>
+			<div>Rewards:<br><span id="statRewards">[0]:0 [1]:0</span></div>
+		</div>
+
+    </div>
+
+<script>
+const BOARD_SIZE = 5;
+const BOARD_CELLS = BOARD_SIZE * BOARD_SIZE;
+let linesCleared = 0;
+let selectedBlockIndex = -1;
+let board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+let statGames = 0;
+let maxLines = 0;
+let sumLines = 0;
+let trainingMode = false;
+let delay = 100; //ms
+let trainLimitK = 20; // K
+let rewards = []; // Array
+let invalid_sum = 0;
+let verbose = true;
+
+const blocks = [
+			[
+                [1, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0]
+            ],
+			[
+                [1, 1, 0],
+                [1, 1, 0],
+                [0, 0, 0]
+            ],
+            [
+                [1, 1, 0],
+                [0, 0, 0],
+                [0, 0, 0]
+            ],
+            [
+                [1, 0, 0],
+                [1, 0, 0],
+                [0, 0, 0]
+            ],
+			//[
+            //    [1, 0, 0],
+            //    [1, 1, 0],
+            //    [0, 0, 0]
+            //],
+            //[
+            //    [1, 1, 1],
+            //    [0, 1, 0],
+            //    [0, 0, 0]
+            //]
+];
+
+        function getBlockName(blockIndex) {
+            const shapes = ["block","square","hor-line","ver-line",
+				//"sm-dl-corner",
+				//"sm-top T-shape"
+			];
+            return shapes[blockIndex];
+        }
+
+        function updateScores() {
+			if(verbose) document.getElementById('linesScore').textContent = linesCleared;
+        }
+
+
+// Create the DQN model with 2D tensor input for board and block states;
+const model = tf.sequential();
+
+model.add(tf.layers.conv2d({
+    inputShape: [5, 5, 2], // 2 channels: 2D board and block
+    filters: 32,
+    kernelSize: 3,
+    activation: 'relu'
+}));
+
+model.add(tf.layers.conv2d({ filters: 64, kernelSize: 3, activation: 'relu' }));
+model.add(tf.layers.flatten()); // Flatten to connect to dense layers
+model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
+model.add(tf.layers.dense({ units: BOARD_CELLS })); // Output Q-values for each action
+model.compile({ optimizer: tf.train.adam(), loss: 'meanSquaredError' });
+
+const epsilon = 0.1; // Exploration [0..1); Use [0.3...0.01;0]
+
+console.log("Model initialized with 2D tensor input.");
+//model.summary();
+/*
+Layer (type)                Input Shape      Output shape   Param #   
+=====================================================================
+conv2d_Conv2D1 (Conv2D)     [[null,5,5,1]]   [null,3,3,32]  320       
+conv2d_Conv2D2 (Conv2D)     [[null,3,3,32]]  [null,1,1,64]  18496
+flatten_Flatten1 (Flatten)  [[null,1,1,64]]  [null,64]      0
+dense_Dense1 (Dense)        [[null,64]]      [null,128]     8320 
+dense_Dense2 (Dense)        [[null,128]]     [null,25]      3225
+=====================================================================
+Total params: 30361
+Trainable params: 30361
+Non-trainable params: 0
+
+
+Layer (type)                Input Shape      Output shape   Param #   
+=====================================================================
+conv2d_Conv2D1 (Conv2D)     [[null,5,5,2]]   [null,3,3,32]  608       
+conv2d_Conv2D2 (Conv2D)     [[null,3,3,32]]  [null,1,1,64]  18496     
+flatten_Flatten1 (Flatten)  [[null,1,1,64]]  [null,64]      0         
+dense_Dense1 (Dense)        [[null,64]]      [null,128]     8320      
+dense_Dense2 (Dense)        [[null,128]]     [null,25]      3225      
+=====================================================================
+Total params: 30649
+Trainable params: 30649
+Non-trainable params: 0
+*/
+
+
+function createBoard() { // Redraw board
+if(verbose) {
+    const boardElement = document.getElementById('board');
+    boardElement.innerHTML = '';
+    
+    for (let i = 0; i < BOARD_SIZE; i++) {
+        for (let j = 0; j < BOARD_SIZE; j++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell' + (board[i][j] ? ' filled' : '');
+            cell.onmouseover = () => {
+                if (selectedBlockIndex !== -1) {
+                    highlightGhostBlock(i, j, blocks[selectedBlockIndex]);
+                }
+            };
+            cell.onclick = () => tryPlaceBlock(i, j);
+            boardElement.appendChild(cell);
+        }
+    }
+}
+}
+
+function createBlocks() {
+            // Randomly select one block
+            const randomIndex = Math.floor(Math.random() * blocks.length);
+		if(verbose) {
+			const blocksContainer = document.getElementById('blocks');
+            blocksContainer.innerHTML = '';
+            const blockElement = document.createElement('div');
+            blockElement.className = 'block';
+            
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'block-cell' + (blocks[randomIndex][i][j] ? ' active' : '');
+                    blockElement.appendChild(cell);
+                }
+            }
+            
+            blocksContainer.appendChild(blockElement);
+		} // EO if(verbose)
+			selectedBlockIndex = randomIndex;
+} // EO createBlocks()
+
+function highlightGhostBlock(row, col, block) {
+    const boardElement = document.getElementById('board');
+    boardElement.querySelectorAll('.cell').forEach(cell => cell.classList.remove('ghost'));
+
+    if (canPlaceBlock(row, col, block)) {
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+                if (block[i][j]) {
+                    const ghostCell = boardElement.children[(row + i) * BOARD_SIZE + (col + j)];
+                    ghostCell.classList.add('ghost');
+                }
+            }
+        }
+    }
+} // EO highlightGhostBlock()
+
+        function canPlaceBlock(row, col, block) {
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    if (block[i][j]) {
+                        const newRow = row + i;
+                        const newCol = col + j;
+                        if (newRow >= BOARD_SIZE || newCol >= BOARD_SIZE || board[newRow][newCol]) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
+        function placeBlock(row, col, block) {           
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    if (block[i][j]) {
+                        board[row + i][col + j] = 1;
+                    }
+                }
+            }
+        }  // EO placeBlock()
+
+        function tryPlaceBlock(row, col) {
+            if (selectedBlockIndex === -1) return;
+            
+            const block = blocks[selectedBlockIndex];
+            if (canPlaceBlock(row, col, block)) {
+                placeBlock(row, col, block);
+                updateScores();
+                createBoard();
+                checkLines();
+                createBlocks(); // Generate new random block
+				return true;
+            } else {
+				return false;
+			}
+        }
+
+        function checkLines() {
+            
+            // Check rows
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                if (board[i].every(cell => cell === 1)) {
+                    board[i].fill(0);
+                    linesCleared++;
+                }
+            }
+            
+            // Check columns
+            for (let j = 0; j < BOARD_SIZE; j++) {
+                if (board.every(row => row[j] === 1)) {
+                    for (let i = 0; i < BOARD_SIZE; i++) {
+                        board[i][j] = 0;
+                    }
+                    linesCleared++;
+                }
+            }
+            
+            if (linesCleared > 0) {
+                updateScores();
+                createBoard();
+            }
+        } // EO checkLines()
+
+        function resetGame() {
+            board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+			linesCleared = 0;
+            selectedBlockIndex = -1;
+            updateScores();
+            createBoard();
+            createBlocks();
+            updateStats();
+        }
+
+        function toggleTraining() {
+            trainingMode = !trainingMode;
+            document.getElementById("toggleTrain").innerText = trainingMode ? "Stop Training" : "Start Training";
+            if (trainingMode) trainModel();
+			console.log("Training mode: ",trainingMode,"(",new Date().toISOString().replace('T', ' ').split('.')[0],")");
+        }
+
+async function trainModel() {
+    if (!trainingMode) return;
+
+    if (isGameOver() || invalid_sum < -24) {
+        statGames += 1;
+        sumLines += linesCleared;
+        if (statGames > trainLimitK * 1000) {
+            toggleTraining();
+            console.log("Training games "+trainLimitK+"k limit reached!");
+        }
+        resetGame();
+    }
+
+    // Create combined input tensor: [5, 5, 2]
+    const blockTensor = tf.tensor2d(blocks[selectedBlockIndex].flat(), [3, 3])
+        .pad([[0, 2], [0, 2]]); // Pad block to 5x5
+    const boardTensor = tf.tensor2d(board.flat(), [5, 5]);
+    const inputTensor = tf.stack([boardTensor, blockTensor], -1).expandDims(0);
+
+
+    // Predict Q-values
+    const qValues = model.predict(inputTensor);
+    const action = Math.random() < epsilon
+        ? Math.floor(Math.random() * BOARD_CELLS) // Random action
+        : qValues.argMax(-1).dataSync()[0]; // Best action
+
+    const row = Math.floor(action / BOARD_SIZE);
+    const col = action % BOARD_SIZE;
+
+    let reward = 0;
+    const prevLines = linesCleared;
+    if (tryPlaceBlock(row, col, blocks[selectedBlockIndex])) {
+        reward = 1 + (linesCleared - prevLines) * 10;
+		rewards[reward] = (rewards[reward] || 0) + 1;
+		invalid_sum = 0; // Reset streak;
+    } else {
+        reward = -5;
+        invalid_sum += reward;
+		rewards[0] = (rewards[0] || 0) + 1; // Index "-1" is invalid
+    }
+
+    // Update Q-values
+    const targetQValues = qValues.arraySync()[0];
+    targetQValues[action] = reward;
+    const targetsTensor = tf.tensor2d([targetQValues]);
+
+    // For debugging with breakpoint:
+    const inputTensor_debug = inputTensor.arraySync(); // State (Board+Block Tensor)
+    const targetsTensor_debug = targetsTensor.arraySync(); // Target Q-Values (Targets Tensor)
+
+    await model.fit(inputTensor, targetsTensor, { batchSize: 1, epochs: 1 });
+
+
+//	if(verbose)
+//		console.log("Action(",action,"):",getBlockName(selectedBlockIndex),": row:",row,", col:",col,", reward: ",reward); // Debug
+
+	if(linesCleared>maxLines) {
+		maxLines = linesCleared; //new maxLines
+		console.log("Games: ",statGames,", maxLines:",maxLines);
+	}
+
+    if (verbose) updateStats();
+
+    // Cleanup
+    inputTensor.dispose();
+    //boardTensor.dispose();
+    targetsTensor.dispose();
+    qValues.dispose();
+
+    if (trainingMode) setTimeout(trainModel, delay);
+} // EO trainModel()
+
+function getModelSize() {
+    const trainableParams = model.countParams(); // Total number of parameters
+    const bytesPerParam = 4; // float32 = 4 bytes
+    return trainableParams * bytesPerParam; // Size in bytes
+}
+
+        function updateStats() {
+			document.getElementById('statGames').innerText = statGames;
+			document.getElementById('statMaxLines').innerText = maxLines;
+			document.getElementById('statAvgLines').innerText = (statGames==0?0:sumLines/statGames).toFixed(2);
+            document.getElementById("statMemory").innerText = (getModelSize()/1024).toFixed(0);
+			document.getElementById('statRewards').innerText = Object.keys(rewards).map(key => `[${key}]:${rewards[key]}`).join(" ");
+        }
+
+    function isGameOver() {
+        if (selectedBlockIndex === -1) return false; // Ensure there's a selected block to check
+        const currentBlock = blocks[selectedBlockIndex]; // Get the currently selected block
+
+        // Check if the current block can be placed anywhere on the board
+        for (let row = 0; row < BOARD_SIZE; row++) {
+            for (let col = 0; col < BOARD_SIZE; col++) {
+                if (canPlaceBlock(row, col, currentBlock)) {
+                    return false; // There's at least one valid move
+                }
+            }
+        }
+        return true; // No valid moves for the current block
+    }
+
+    document.getElementById("toggleTrain").onclick = toggleTraining;
+
+    resetGame(); // Initialize game
+
+        document.getElementById('delaySlider').addEventListener('input', e => {
+            document.getElementById('delayValue').textContent = e.target.value;
+			delay = e.target.value;
+		});
+
+		document.getElementById('checkVerbose').addEventListener('change', function (event) {
+			if (event.target.checked) { verbose = true; }
+			else { verbose = false; }
+		});
+
+		document.getElementById('trainLimitK').addEventListener('change', (e) => {
+			trainLimitK = e.target.value;
+		});
+
+</script>
+</body>
+</html>
