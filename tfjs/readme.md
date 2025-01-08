@@ -1,4 +1,4 @@
-# BlockPuzzle Play, AI Play & Train with Tensorflow
+# BlockPuzzle Play, AI Play & Train with TensorFlow.js
 
 * [TFjs 5x5](bp5_b4_2d_20250108.html)
 
