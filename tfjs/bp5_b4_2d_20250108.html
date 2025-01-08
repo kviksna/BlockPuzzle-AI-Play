@@ -460,7 +460,7 @@ function highlightGhostBlock(row, col, block) {
 //***********************************************************************************************
 //***********************************************************************************************
 async function trainModel() {
-    if (!trainingMode || ) return;
+    if (!trainingMode) return;
     if (modelFitRuns) setTimeout(trainModel, 1000); // 1s
 
     if (isGameOver() || invalid_sum < -24) {
