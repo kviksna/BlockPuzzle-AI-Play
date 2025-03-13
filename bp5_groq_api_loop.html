@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Block Puzzle (5x5)</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #121212;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', 'Arial', sans-serif;
+        }
+    
+        .hor { display: flex; flex-direction: row; gap: 12px; }
+        .ver { display: flex; flex-direction: column; gap: 8px; } /* Reduced gap for compactness */
+    
+        .game-container {
+            text-align: center;
+            width: 515px;
+            padding: 15px;
+            background: #1e1e1e;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+    
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 10px;
+        }
+    
+        .header h2 {
+            margin: 0;
+            font-size: 1.4em; /* Slightly smaller */
+            font-weight: 600;
+            color: #ffffff;
+        }
+    
+        .board {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 3px;
+            background: #2a2a2a;
+            padding: 5px;
+            border-radius: 8px;
+            width: min-content;
+        }
+    
+        .cell {
+            width: 32px; /* Reduced from 35px */
+            height: 32px;
+            background: #212121;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 4px;
+        }
+    
+        .cell:hover {
+            background: #424242;
+            transform: scale(1.05);
+        }
+    
+        .cell.filled { background: #4CAF50; box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2); }
+        .cell.last-placed { background: #FFD700; color: #000; }
+    
+        .cell.ghost {
+            background: rgba(76, 175, 80, 0.5); /* Semi-transparent green */
+        }
+
+        .blocks-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 8px; /* Tightened spacing */
+        }
+    
+        .block {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2px;
+            background: #2a2a2a;
+            padding: 3px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+    
+        .block:hover { transform: scale(1.05); }
+    
+        .block-cell {
+            width: 18px; /* Reduced from 20px */
+            height: 18px;
+            background: #212121;
+            border-radius: 3px;
+        }
+    
+        .block-cell.active { background: #4CAF50; box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2); }
+    
+        .controls {
+            /*flex: 1; /* Takes remaining space */
+            min-width: 300px; /* Ensures readability */
+        }
+    
+        .scores {
+            justify-content: flex-start; /* Align left for consistency */
+            font-size: 1em;
+            font-weight: 500;
+            color: #b0b0b0;
+        }
+    
+        button {
+            background: #4CAF50;
+            border: none;
+            padding: 6px 12px; /* Smaller buttons */
+            color: #ffffff;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+    
+        button:hover { background: #66BB6A; transform: translateY(-2px); }
+        button:active { transform: translateY(0); }
+    
+        input[type="password"] {
+            flex: 1; /* Expands to fill space */
+            background: #212121;
+            color: #e0e0e0;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 6px;
+        }
+    
+        input[type="password"]:focus { border-color: #4CAF50; outline: none; }
+        input[type="checkbox"] { accent-color: #4CAF50; }
+    
+        textarea {
+            width: 100%;
+            /* height: 120px; */
+            /* margin-top: 8px; */
+            background: #212121;
+            color: #e0e0e0;
+            border: 1px solid #333;
+            border-radius: 6px;
+            /* padding: 8px; */
+            resize: none;
+            font-family: 'Consolas', monospace;
+            /* line-height: 1.4; */
+        }
+    
+        textarea:focus { border-color: #4CAF50; outline: none; }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="header">
+            <h2>Block Puzzle (5x5)</h2>
+            <button onclick="resetGame()">New Game</button>
+        </div>
+        <div class="hor">
+            <!-- Left Column -->
+            <div class="ver">
+                <div class="board" id="board"></div>
+                <div class="scores hor">
+                    <div>Lines: <span id="linesScore">0</span></div>
+                    <div class="blocks-container" id="blocks"></div>
+                </div>
+                <div class="hor">
+                    <input type="password" class="api-key" id="apiKey" placeholder="Groq API Key" 
+                    value="">
+                    
+                </div>
+                <div class="hor">
+                    <span><input type="checkbox" id="continueOnValid"> Loop AI play</span>
+                    <button class="ask-ai" onclick="askAI()">Ask AI</button>
+                </div>
+            </div>
+            <!-- Right Column -->
+            <div class="ver controls">
+                <textarea id="aiPrompt" placeholder="AI Prompt" style="height: 200px;"></textarea>
+                <textarea id="aiAnswer" placeholder="AI Answer" style="height: 120px;"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const BOARD_SIZE = 5;
+		let linesCleared = 0;
+        let selectedBlockIndex = -1;
+        let board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+        let lastPlacedCells = []; // To track last placed positions
+        
+        const blocks = [
+            [
+                [1, 1, 1],
+                [0, 0, 0],
+                [0, 0, 0]
+            ],
+            [
+                [1, 0, 0],
+                [1, 1, 0],
+                [0, 0, 0]
+            ],
+            [
+                [1, 1, 0],
+                [1, 1, 0],
+                [0, 0, 0]
+            ],
+            [
+                [1, 0, 0],
+                [1, 0, 0],
+                [1, 0, 0]
+            ],
+            [
+                [1, 1, 0],
+                [0, 1, 0],
+                [0, 0, 0]
+            ]
+        ];
+
+        function getBlockName(blockIndex) {
+            const shapes = ["horizontal line", "L-shape", "square", "vertical line", "T-shape"];
+            return shapes[blockIndex];
+        }
+
+        function updateScores() {
+			document.getElementById('linesScore').textContent = linesCleared;
+        }
+
+function generateAIPrompt() {
+
+    let boardState = "Board state (5x5):\n";
+    for (let i = 0; i < BOARD_SIZE; i++) {
+        boardState += "[";
+        for (let j = 0; j < BOARD_SIZE; j++) {
+            boardState += board[i][j];
+            if (j < BOARD_SIZE - 1) boardState += ",";
+        }
+        boardState += "]\n";
+    }
+    
+    let pieceState = "Next block (3x3):\n";
+    const block = blocks[selectedBlockIndex];
+    for (let i = 0; i < 3; i++) {
+        pieceState += "[";
+        for (let j = 0; j < 3; j++) {
+            pieceState += block[i][j];
+            if (j < 2) pieceState += ",";
+        }
+        pieceState += "]\n";
+    }
+    
+    const prompt = `Obey BlockPuzzle game rules and aim for BlockPuzzle game goals.\n` +
+        `${boardState}` +
+        `Blocks can not be rotated. Blocks can not overlap already taken cells on the board.\n` +
+        `${pieceState}` +
+        `Output only new block placement in format: {"row": y, "col": x}\n` +
+        `Output very short and very compact answer!`;
+
+    document.getElementById('aiPrompt').value = prompt;
+}
+
+function createBoard() {
+    const boardElement = document.getElementById('board');
+    boardElement.innerHTML = '';
+    
+    for (let i = 0; i < BOARD_SIZE; i++) {
+        for (let j = 0; j < BOARD_SIZE; j++) {
+            const cell = document.createElement('div');
+            let className = 'cell';
+            if (board[i][j]) className += ' filled';
+            cell.className = className;
+            
+            cell.onmouseover = () => {
+                highlightGhostBlock(i, j, blocks[selectedBlockIndex]);
+            };
+
+            // Add '*' if this cell was part of last placed block
+            if (lastPlacedCells.some(([r, c]) => r === i && c === j)) {
+                cell.textContent = '*';
+            }
+            
+            cell.onclick = () => tryPlaceBlock(i, j);
+            boardElement.appendChild(cell);
+        }
+    }
+}
+
+        function createBlocks() {
+            const blocksContainer = document.getElementById('blocks');
+            blocksContainer.innerHTML = '';
+            
+            // Randomly select one block
+            const randomIndex = Math.floor(Math.random() * blocks.length);
+            const blockElement = document.createElement('div');
+            blockElement.className = 'block';
+            blockElement.onclick = () => selectBlock(randomIndex);
+            
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'block-cell' + (blocks[randomIndex][i][j] ? ' active' : '');
+                    blockElement.appendChild(cell);
+                }
+            }
+            
+            blocksContainer.appendChild(blockElement);
+            selectedBlockIndex = randomIndex;
+            generateAIPrompt();
+        }
+
+function highlightGhostBlock(row, col, block) {
+    const boardElement = document.getElementById('board');
+    boardElement.querySelectorAll('.cell').forEach(cell => cell.classList.remove('ghost'));
+
+    if (canPlaceBlock(row, col, block)) {
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+                if (block[i][j]) {
+                    const ghostCell = boardElement.children[(row + i) * BOARD_SIZE + (col + j)];
+                    ghostCell.classList.add('ghost');
+                }
+            }
+        }
+    }
+} // EO highlightGhostBlock()
+
+        function canPlaceBlock(row, col, block) {
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    if (block[i][j]) {
+                        const newRow = row + i;
+                        const newCol = col + j;
+                        if (newRow >= BOARD_SIZE || newCol >= BOARD_SIZE || board[newRow][newCol]) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
+function placeBlock(row, col, block) {
+    lastPlacedCells = []; // Reset previous positions
+    for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+            if (block[i][j]) {
+                board[row + i][col + j] = 1;
+                lastPlacedCells.push([row + i, col + j]); // Store position
+            }
+        }
+    }
+}
+
+        function tryPlaceBlock(row, col) {
+            if (selectedBlockIndex === -1) return;
+            
+            const block = blocks[selectedBlockIndex];
+            if (canPlaceBlock(row, col, block)) {
+                placeBlock(row, col, block);
+                updateScores();
+                createBoard();
+                checkLines();
+                createBlocks(); // Generate new random block
+
+                if (isGameOver()) {
+                    const continueOnValidCheckbox = document.getElementById('continueOnValid');
+                    continueOnValidCheckbox.checked = false;
+                    setTimeout(() => {}, 1000); // 1sec delay
+                    alert("Game ended!");
+                }
+            }
+        }
+
+        function checkLines() {
+            
+            // Check rows
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                if (board[i].every(cell => cell === 1)) {
+                    board[i].fill(0);
+                    linesCleared++;
+                }
+            }
+            
+            // Check columns
+            for (let j = 0; j < BOARD_SIZE; j++) {
+                if (board.every(row => row[j] === 1)) {
+                    for (let i = 0; i < BOARD_SIZE; i++) {
+                        board[i][j] = 0;
+                    }
+                    linesCleared++;
+                }
+            }
+            
+            if (linesCleared > 0) {
+                updateScores();
+                createBoard();
+            }
+            generateAIPrompt();
+        }
+
+    function isGameOver() {
+        const currentBlock = blocks[selectedBlockIndex];
+
+        // Check if the current block can be placed anywhere on the board
+        for (let row = 0; row < BOARD_SIZE; row++) {
+            for (let col = 0; col < BOARD_SIZE; col++) {
+                if (canPlaceBlock(row, col, currentBlock)) {
+                    return false; // There's at least one valid move
+                }
+            }
+        }
+        return true; // No valid moves for the current block
+    }
+
+function resetGame() {
+    board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+    linesCleared = 0; // Fixed variable name from linesScore to linesCleared
+    selectedBlockIndex = -1;
+    lastPlacedCells = []; // Reset last placed positions
+    updateScores();
+    createBoard();
+    createBlocks();
+}
+
+        // Initialize game
+        resetGame();
+    </script>
+
+<script>
+async function askAI() {
+    const apiKeyInput = document.getElementById('apiKey');
+    const aiPromptElem = document.getElementById('aiPrompt');
+    const aiAnswerElem = document.getElementById('aiAnswer');
+    aiAnswerElem.value= ""; // Reset answer
+    const apiKey = apiKeyInput.value;
+    const prompt = aiPromptElem.value;
+
+    if (!apiKey) { alert("Please enter your API key."); return; }
+
+    try {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+		  messages: [
+           {
+             role: "user",
+             content: prompt
+           }
+         ],
+		  model: "qwen-2.5-32b",
+		  // qwen-2.5-32b -good instruction follow!
+		  //llama-3.3-70b-specdec, llama-3.3-70b-versatile, gemma2-9b-it
+          // NOT(because-reasoning!): deepseek-r1-distill-llama-70b, qwen-qwq-32b
+          //max_tokens: 1024,
+          max_tokens: 48,
+          temperature: 0.7
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}`);
+      }
+
+      const data = await response.json();
+      //llmResponseElement.value = JSON.stringify(data,null,2); // Debug
+	  
+      const dataStr = data.choices[0].message.content.trim();
+
+      let outStr = "Answer: " + dataStr + "\n";
+      outStr += "\nParsed: ";
+
+const match = dataStr.match(/{"row":\s*\d+,\s*"col":\s*\d+}/);
+if (match) {
+    const parsed = JSON.parse(match[0]);
+    //outStr += JSON.stringify(parsed,null,2); // { row: 0, col: 4 }
+    outStr += JSON.stringify(parsed); // { row: 0, col: 4 }
+
+    aiAnswerElem.value = outStr;
+    const continueOnValidCheckbox = document.getElementById('continueOnValid');
+
+    const block = blocks[selectedBlockIndex];
+    const row = parsed["row"];
+    const col = parsed["col"];
+
+    if (canPlaceBlock(row, col, block)) {
+        outStr += "\n\nMoved! Waiting for next turn...";
+        aiAnswerElem.value = outStr;
+        tryPlaceBlock(row, col); //places blocks and makes next block;    
+    } else { 
+        outStr += "\n\nInvalid move!";
+        const aiPromptElem = document.getElementById('aiPrompt');
+        aiPromptElem.value += "\n"+JSON.stringify(parsed)+" is invalid move!";
+        aiPromptElem.scrollTop = aiPromptElem.scrollHeight;
+    }
+
+    if(continueOnValidCheckbox.checked) { setTimeout(askAI, 2000); }
+    // 1s - HTTP error 429 (Too Many Requests) Limit!
+    //setTimeout(askAI, 5000);
+} else {
+    outStr += "No match found";
+}
+
+      aiAnswerElem.value = outStr;
+
+    } catch (error) {
+      console.error("Error fetching API:", error);
+      aiAnswerElem.value = "Error: ", error;
+    }
+} // EO askAI()
+</script>
+
+</body>
+</html>
